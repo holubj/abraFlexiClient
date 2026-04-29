@@ -18,6 +18,11 @@ export class AFEntity {
   stitky?: string | null
 
   _orig: Record<string, any> = {}
+  // True until the entity is confirmed to exist in Abra. Cleared by AFApiClient
+  // when the entity is decoded from a server response, returned from
+  // createIdStub(), or successfully saved. Setting `id` or `kod` manually does
+  // NOT clear this — use createIdStub() for referencing existing entities.
+  _isNew: boolean = true
 
   constructor(stitkyCache: AFStitkyCache) {
     this._stitkyCache = stitkyCache
@@ -40,7 +45,7 @@ export class AFEntity {
   }
 
   get isNew(): boolean {
-    return !this.id && !this.kod
+    return this._isNew
   }
 
   protected getCotr(): typeof AFEntity {
