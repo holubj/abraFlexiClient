@@ -44,11 +44,40 @@ export enum UpdateStrategy {
 
 export type AFApiFetch = (input: RequestInfo | URL, init?: RequestInit | undefined) => Promise<Response>
 
+// Output formats supported by Abra Flexi (URL extension). The `(string & {})`
+// fallback keeps autocomplete on the literals while allowing other extensions
+// (e.g. 'isdocx') without changes to this type.
+export type AFResponseFormat =
+  | 'json'
+  | 'xml'
+  | 'pdf'
+  | 'html'
+  | 'csv'
+  | 'isdoc'
+  | (string & {})
+
+export type AFFileResult = {
+  blob: Blob,
+  contentType: string,
+  filename?: string
+}
+
+export type AFLogLevel = 'none' | 'error' | 'warn' | 'info' | 'debug'
+
+export interface AFLogger {
+  debug(...args: any[]): void
+  info(...args: any[]): void
+  warn(...args: any[]): void
+  error(...args: any[]): void
+}
+
 export type AFApiConfig = {
   url: string,
   company: string,
   fetch?: AFApiFetch,
-  stitkyCacheStrategy?: StitkyCacheStrategy
+  stitkyCacheStrategy?: StitkyCacheStrategy,
+  logger?: AFLogger,
+  logLevel?: AFLogLevel
 }
 
 export type NO_LIMIT_T = 0
@@ -62,7 +91,7 @@ export enum AFQueryDetail {
 
 export type AFNestedDetail = (string | [string, AFNestedDetail])[]
 
-export type AFQueryOptions = { 
+export type AFQueryOptions = {
   detail?: AFNestedDetail | AFQueryDetail,
   filter?: AFFilter,
   limit?: number | NO_LIMIT_T,
@@ -76,14 +105,32 @@ export type AFQueryOptions = {
   noSimpleMode?: boolean,
   noValidityCheck?: boolean,
   noUpdateStitkyCache?: boolean,
-  entityPathPrefix?: string,
   ucetniObdobi?: string,
   koncovyMesicRok?: string,
   pocetMesicu?: number
   date?: string
   currency?: string
 
+  // Parent-entity selectors for nested entities. The resolver in
+  // AFNestedEntityResolver.ts decides which selector applies to which entity.
+  // Example: AFIndividualniCenik uses `adresarId` to scope under /adresar/<id>/
+  // Accepts a numeric id, an id-as-string, or an AFFilter built via ID(...) /
+  // CODE(...) / EXT(...) for selecting the parent by code or external id.
+  adresarId?: number | string | AFFilter
+
   abortController?: AbortController
+}
+
+// Options for non-JSON formats fetched via queryFile / queryFileRaw.
+// Adds report-related parameters that Abra Flexi accepts on file endpoints
+// (e.g. PDF rendered from a named template in a specific language).
+export type AFQueryFileOptions = AFQueryOptions & {
+  // Maps to the `report-name` URL query parameter — name of the print
+  // template/report to use when rendering the file.
+  reportName?: string,
+  // Maps to the `report-lang` URL query parameter — language code for the
+  // report (e.g. 'cs', 'en').
+  reportLang?: string
 }
 
 export type AFURelOptions = {
@@ -123,6 +170,15 @@ export type AFSaveOptions = {
 }
 
 export type AFDeleteOptions = {
+  abortController?: AbortController,
+  // When true, the delete is performed via PUT with `@action: 'delete'` instead
+  // of an HTTP DELETE on /entity/<id>. Required for entities like
+  // AFUzivatelskaVazba where the standard DELETE endpoint is not supported.
+  // The high-level delete() sets this automatically based on the entity class.
+  asUserRelation?: boolean
+}
+
+export type AFActionOptions = {
   abortController?: AbortController
 }
 
