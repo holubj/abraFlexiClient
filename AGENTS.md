@@ -51,7 +51,7 @@ examples/          Runnable ts-node examples
 
 Build pipeline: `npm run build` runs `rimraf dist` then `tsdown` (config in `tsdown.config.ts`), which compiles `src/index.ts` into `dist/index.mjs` (ESM) and `dist/index.cjs` (CJS) with `.d.ts` declarations.
 
-Test config is in `jestconfig.json`; test files match `**/*.spec.ts` or `**/*.test.ts` or files inside `__tests__/`. `ts-jest` handles TypeScript transformation.
+Test files match `**/*.spec.ts` or `**/*.test.ts` or files inside `__tests__/`. `ts-jest` handles TypeScript transformation.
 
 ---
 
