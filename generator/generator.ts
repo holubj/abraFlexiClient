@@ -12,6 +12,7 @@ const __dirname = path.dirname(__filename)
 const EVIDENCE_LIST_FILE = 'evidence-list.json'
 const PROPERTIES_FILE = 'properties.json'
 const RELATIONS_FILE = 'relations.json'
+const ACTIONS_FILE = 'actions.json'
 const DEFAULT_DIR = './src/generated'
 
 const MAIN_TEMPLATE_CLASS_FILE = __dirname + '/templates/classFile.ejs'
@@ -24,7 +25,7 @@ const ENUM_FILE_OUT = 'AFEntityEnums'
 const REGISTRY_FILE_OUT = 'AFEntityRegistry'
 const INDEX_FILE_OUT = 'index'
 
-import { EnumDef, EvidenceDef, PropertyDef, PropertyType, RelationDef, ValueObj } from './types.js'
+import { ActionDef, EnumDef, EvidenceDef, PropertyDef, PropertyType, RelationDef, ValueObj } from './types.js'
 
 const argv = yargs(hideBin(process.argv))
 .option('s', { alias: 'server', type: 'string', description: 'URL to ABRA Flexi server. With company path component, trailed by /.', demandOption: true})
@@ -171,6 +172,58 @@ function parseRelations(input: any, evidences: EvidenceDef[]): RelationDef[] {
   return out
 }
 
+// Fetches actions.json for an evidence. Returns null if the endpoint is
+// missing/404 — not every evidence exposes one. Network/JSON errors are
+// also treated as "no actions" rather than aborting the whole generation.
+async function fetchActions(url: string): Promise<any> {
+  try {
+    const res = await fetch(url, buildHeaders())
+    if (!res.ok) return null
+    return await res.json()
+  } catch {
+    return null
+  }
+}
+
+function parseActions(input: any): ActionDef[] {
+  if (!input || !input.actions) return []
+  let raw = input.actions.action
+  if (!raw) return []
+  if (!Array.isArray(raw)) raw = [raw]
+
+  const out: ActionDef[] = []
+  for (const a of raw) {
+    if (!a || typeof a.actionId !== 'string') continue
+    const def: ActionDef = {
+      actionId: a.actionId,
+      actionName: a.actionName ?? '',
+      needInstance: parseBool(a.needInstance),
+      actionMakesSense: a.actionMakesSense ?? '',
+      isRealAction: parseBool(a.isRealAction),
+      isService: a.isService ?? 'NO'
+    }
+    // Drop CRUD pseudo-actions (new/edit/delete/copy) — handled by
+    // dedicated client methods. Only keep "real" business actions.
+    if (!def.isRealAction) continue
+    def.enumKey = actionIdToEnumKey(def.actionId)
+    out.push(def)
+  }
+  return out
+}
+
+// Converts an actionId (typically lowercase, possibly kebab-case or with
+// underscores/digits) to a PascalCase TypeScript enum key. Prefixes `_`
+// if the result would start with a digit so it stays a valid identifier.
+function actionIdToEnumKey(actionId: string): string {
+  let key = actionId
+    .split(/[-_]/)
+    .filter(s => s.length)
+    .map(s => s.charAt(0).toUpperCase() + s.slice(1))
+    .join('')
+  if (!/^[a-zA-Z_]/.test(key)) key = '_' + key
+  return key
+}
+
 function parseBool(input: string): boolean {
   return input === 'true'
 }
@@ -257,7 +310,9 @@ async function generateEntityClass(
     tsClassName: evidence.tsClassName,
     evidencePath: evidence.evidencePath,
     evidenceType: evidence.evidenceType,
-    evidenceName: evidence.evidenceName
+    evidenceName: evidence.evidenceName,
+    actions: evidence.actions ?? [],
+    actionEnumName: evidence.actionEnumName ?? null
   }
 
   // Imports
@@ -419,11 +474,18 @@ export async function main() {
     const propsIn = await fetchJson(urlBase + ev.evidencePath + '/' + PROPERTIES_FILE)
     console.log(`- Fetchin relations ...`)
     const relsIn = await fetchJson(urlBase + ev.evidencePath + '/' + RELATIONS_FILE)
+    console.log(`- Fetchin actions ...`)
+    const actionsIn = await fetchActions(urlBase + ev.evidencePath + '/' + ACTIONS_FILE)
 
     console.log(`- Parsing properties ...`)
     const props = parseProperties(propsIn, evidences)
     console.log(`- Parsing relations ...`)
     const refs = parseRelations(relsIn, evidences)
+    console.log(`- Parsing actions ...`)
+    ev.actions = parseActions(actionsIn)
+    if (ev.actions.length) {
+      ev.actionEnumName = ev.tsClassName + 'Action'
+    }
 
     console.log(`- Generating class ...`)
     const classCode = generateEntityClass(ev, props, refs, enumList)
