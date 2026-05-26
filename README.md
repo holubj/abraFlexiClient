@@ -342,7 +342,7 @@ Pro každou evidenci s reálnými business akcemi generátor vyrobí samostatný
 ```typescript
 import { AFFakturaPrijata, AFFakturaPrijataAction } from 'abra-flexi'
 
-const faktura = await api.createIdStub(AFFakturaPrijata, { id: 2452 })
+const faktura = await api.resolveStubId(AFFakturaPrijata, 2452)
 await api.action(faktura, AFFakturaPrijataAction.Storno)
 // nebo s textovou hodnotou:
 await api.action(faktura, 'uhrad-zapoctem')
