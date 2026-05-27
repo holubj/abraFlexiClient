@@ -25,7 +25,7 @@ const ENUM_FILE_OUT = 'AFEntityEnums'
 const REGISTRY_FILE_OUT = 'AFEntityRegistry'
 const INDEX_FILE_OUT = 'index'
 
-import { ActionDef, EnumDef, EvidenceDef, PropertyDef, PropertyType, RelationDef, ValueObj } from './types.js'
+import { ActionDef, EnumDef, EnumOptionDef, EvidenceDef, PropertyDef, PropertyType, RelationDef, ValueObj } from './types.js'
 
 const argv = yargs(hideBin(process.argv))
 .option('s', { alias: 'server', type: 'string', description: 'URL to ABRA Flexi server. With company path component, trailed by /.', demandOption: true})
@@ -341,28 +341,45 @@ async function generateEntityClass(
   // Enums
   for (const p of properties) {
     if (p.values && p.values.value && p.values.value.length) {
-      let enumKey = p.values.value[0]['@key'].split('.')[0]
-      enumKey = enumKey.charAt(0).toUpperCase() + enumKey.slice(1)
+      let enumKey: string
+      let options: EnumOptionDef[]
+
+      if (p.type === PropertyType.Array) {
+        // Array properties don't share a namespace prefix in their @key
+        // (values are bare names like 'Pridavat', 'Menit'). Synthesize a
+        // unique enum name from the entity + property name, and derive
+        // option keys by camel-casing the raw @key.
+        const entityShortName = evidence.tsClassName.replace(/^AF/, '')
+        const propPascal = p.propertyName.charAt(0).toUpperCase() + p.propertyName.slice(1)
+        enumKey = entityShortName + propPascal
+        options = p.values.value.map(i => {
+          let key = i['@key']
+            .split('-')
+            .map((w: string, idx: number) => idx === 0 ? w : w.charAt(0).toUpperCase() + w.slice(1))
+            .join('')
+          key = key.charAt(0).toLowerCase() + key.slice(1)
+          if (!(/^[a-zA-Z_]/.test(key))) key = '_' + key
+          return { key, value: i['@key'], comment: i['$'] }
+        })
+      } else {
+        enumKey = p.values.value[0]['@key'].split('.')[0]
+        enumKey = enumKey.charAt(0).toUpperCase() + enumKey.slice(1)
+        options = p.values.value.map(i => {
+          let key = i['@key'].split('.')[1].replace(/-/g, "_")
+          if (!(/^[a-zA-Z_]/.test(key))) key = '_' + key
+          return { key, value: i['@key'], comment: i['$'] }
+        })
+      }
+
       p.enumName = enumKey
       p.genType = generateType(p)
       if (enumList.find(le => le.key === enumKey)) {
         // TODO check if options mateches
       } else {
-        const uprop = p.propertyName.charAt(0).toUpperCase() + p.propertyName.slice(1)
         enumList.push({
           key: enumKey,
           file: ENUM_FILE_OUT,
-          options: p.values.value.map(i => {
-            let key = i['@key'].split('.')[1].replace(/-/g, "_")
-            if (!(/^[a-zA-Z_]/.test(key))){
-              key = '_' + key
-            } 
-            return {
-              key: key,
-              value: i['@key'],
-              comment: i['$']
-            }
-          })
+          options
         })
       }
       if (!vars.importEnums.includes(enumKey)) vars.importEnums.push(enumKey)
